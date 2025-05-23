@@ -60,19 +60,80 @@ class LinearModel(nn.Module):
         pi = self.l_pi(s)
         v = self.l_v(s)
         return F.log_softmax(pi, dim=1), torch.tanh(v)
+
+class ResidualBlock(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels)
+        )
     
+    def forward(self, x):
+        x = x + self.block(x)
+        return nn.ReLU()(x)
+
 class MyNet(nn.Module):
     def __init__(self, observation_size:tuple[int, int], action_space_size:int, config:BaseNetConfig, device:torch.device='cpu'):
         super().__init__()
         self.config = config
         self.device = device
-        self.to(device)
         ########################
         # TODO: your code here #
+        assert len(observation_size)==2, "In board mode only!"
+        num_channels = getattr(config, 'num_channels', 64)
+        dropout = getattr(config, 'dropout', 0.2)
+        linear_hidden = getattr(config, 'linear_hidden', [128, 128])
+
+        # Input
+        self.conv_in = nn.Sequential(
+            nn.Conv2d(1, num_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(num_channels),
+            nn.ReLU(inplace=True),
+        )
+
+        self.res_layers = nn.Sequential(
+            *[ResidualBlock(num_channels) for _ in range(4)]
+        )
+        self.dropout = nn.Dropout(dropout)
+
+        # Flatten
+        flatten_dim = num_channels * observation_size[0] * observation_size[1]
+
+        # Policy
+        self.policy_head = nn.Sequential(
+            nn.Linear(flatten_dim, linear_hidden[0]),
+            nn.ReLU(inplace=True),
+            nn.Linear(linear_hidden[0], action_space_size)
+        )
+        # Value
+        self.value_head = nn.Sequential(
+            nn.Linear(flatten_dim, linear_hidden[0]),
+            nn.ReLU(inplace=True),
+            nn.Linear(linear_hidden[0], 1)
+        )
+        self.to(device)
+
         ########################
     
     def forward(self, s: torch.Tensor):
         ########################
         # TODO: your code here #
-        return None, None
+        # s: batch_size x board_x x board_y
+        if s.dim() == 3:
+            s = s.unsqueeze(1)
+
+        s = self.conv_in(s)
+        s = self.res_layers(s)
+        s = self.dropout(s)
+
+        s = s.view(s.size(0), -1)
+
+        pi = self.policy_head(s)
+        v = self.value_head(s)
+
+        return F.log_softmax(pi, dim=1), torch.tanh(v)
         ########################

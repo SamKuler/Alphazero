@@ -59,7 +59,7 @@ class AlphaZeroParallelConfig(AlphaZeroConfig):
         n_match_update:int=20,
         n_match_eval:int=20,
         max_queue_length:int=8000,
-        update_threshold:float=0.501,
+        update_threshold:float=0.500,
         n_search:int=200, 
         temperature:float=1.0, 
         C:float=1.0,
@@ -151,7 +151,7 @@ def execute_episode_worker(
                                 result_counter.add(reward,player)
                                 result = []
                                 final_player = player
-                                # final_player = env.current_player  # Magic
+                                # final_player = env.current_player  # ?
                                 for (canonical_state_, policy_, player_) in train_examples:
                                     value = reward if player_ == final_player else -reward
                                     result.append((canonical_state_, policy_, value))
@@ -440,11 +440,11 @@ if __name__ == "__main__":
         n_match_update=20,
         n_match_eval=20,
         max_queue_length=80000,
-        update_threshold=0.501,
+        update_threshold=0.499,
         n_search=240, 
         temperature=1.0, 
         C=1.0,
-        checkpoint_path="checkpoint/mlp_7x7_3layers_exfeat_1"
+        checkpoint_path="checkpoint/mynet_7x7_3layers_exfeat_1"
     )
     model_training_config = ModelTrainingConfig(
         epochs=10,
@@ -494,8 +494,8 @@ if __name__ == "__main__":
     
     def net_builder(device=device):
         # Deep Neural Network
-        # net = MyNet(env.observation_size, env.action_space_size, model_config, device=device)
-        net = MLPNet(env.observation_size, env.action_space_size, model_config, device=device)
+        net = MyNet(env.observation_size, env.action_space_size, model_config, device=device)
+        # net = MLPNet(env.observation_size, env.action_space_size, model_config, device=device)
         net = ModelTrainer(env.observation_size, env.action_space_size, net, model_training_config)
         
         # Numpy Linear Model
@@ -503,7 +503,7 @@ if __name__ == "__main__":
         # net = NumpyLinearModelTrainer(env.observation_size, env.action_space_size, net, model_training_config)
         return net
         
-    N_WORKER = 10 # increase this as large as your device can afford
+    N_WORKER = 20 # increase this as large as your device can afford
     alphazero = AlphaZeroParallel(env, net_builder, config, N_WORKER, seed=MASTER_SEED)
     alphazero.learn()
     
