@@ -35,12 +35,33 @@ class PUCTMCTS:
             return None
     
     def puct_action_select(self, node:MCTSNode):
-       # select the best action based on PUCB when expanding the tree
+        # select the best action based on PUCB when expanding the tree
         
         ########################
         # TODO: your code here #
         ########################
-        return 0
+        n_total = np.sum(node.child_N_visit)
+        valid_action_mask = np.where(node.action_mask > 0)[0]
+
+        best_action = -1
+        best_pucb = -np.inf
+
+        # PUCB(s) = V(c_i)/N(c_i) + C*P(s,c_i)*sqrt(sum(N(c_i)))/(1+N(c_i))
+        for action in valid_action_mask:
+            vs = node.child_V_total[action]
+            ns = node.child_N_visit[action]
+            ps = node.child_priors[action]
+
+            if ns == 0:
+                pucb = np.inf
+            else:
+                pucb  = vs/ns + self.config.C*ps*np.sqrt(n_total)/(1+ns)
+
+            if pucb > best_pucb:
+                best_pucb = pucb
+                best_action = action
+
+        return best_action
         ########################
 
     def backup(self, node:MCTSNode, value):
@@ -50,7 +71,13 @@ class PUCTMCTS:
         ########################
         # TODO: your code here #
         ########################
-        pass 
+        cur = node
+        while cur.parent is not None:
+            parent = cur.parent
+            parent.child_N_visit[cur.action] += 1
+            parent.child_V_total[cur.action] += value
+            value *= -1
+            cur = parent
         ########################  
     
     def pick_leaf(self):
@@ -61,7 +88,19 @@ class PUCTMCTS:
         ########################
         # TODO: your code here #
         ########################
-        return self.root
+        # if self.config.with_noise and self.root.child_priors.sum() > 0\
+        #     and np.allclose(self.root.child_N_visit,0):
+        #     noise = np.random.dirichlet([self.config.dir_alpha]*self.root.n_action)
+        #     self.root.child_priors = (1-self.config.dir_epsilon)*self.root.child_priors + self.config.dir_epsilon*noise
+
+        cur = self.root
+        while not cur.done:
+            action = self.puct_action_select(cur)
+            if cur.has_child(action):
+                cur = cur.get_child(action)
+            else:
+                return cur.add_child(action)
+        return cur
         ########################
     
     def get_policy(self, node:MCTSNode = None):
@@ -71,18 +110,29 @@ class PUCTMCTS:
         ########################
         # TODO: your code here #
         ########################
-        return np.ones(len(node.child_N_visit)) / len(node.child_N_visit)
+        if node is None:
+            node = self.root
+
+        normalize_factor = np.sum(node.child_N_visit)
+        if normalize_factor > 0:
+            return node.child_N_visit / normalize_factor
+        else:
+            # print("Default policy")
+            policy = np.zeros(node.n_action)
+            valid_action_mask = np.where(node.action_mask > 0)[0]
+            policy[valid_action_mask] = 1 / len(valid_action_mask)
+            return policy
         ########################
 
     def search(self):
         for _ in range(self.config.n_search):
             leaf = self.pick_leaf()
-            value = 0
+            value = 0.0
             if leaf.done:
                 ########################
                 # TODO: your code here #
                 ########################
-                pass
+                value = float(leaf.reward)
                 ########################
             else:
                 ########################
@@ -90,7 +140,10 @@ class PUCTMCTS:
                 ########################
                 # NOTE: you should compute the policy and value 
                 #       using the value&policy model!
-                pass
+                canonical_obs = leaf.env.get_canonical_form_obs()
+                child_prior, value_pred = self.model.predict(canonical_obs)
+                leaf.set_prior(child_prior)
+                value = -value_pred[0]  # Extract scalar value, multiply -1 as view from root
                 ########################
             self.backup(leaf, value)
             

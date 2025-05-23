@@ -75,18 +75,29 @@ class AlphaZero:
             # MCTS self-play
             ########################
             # TODO: your code here #
-            policy = None # compute policy with mcts
-            
-            symmetries = get_symmetries(state, policy) # rotate&flip the data&policy
+            policy = mcts.search() # compute policy with mcts
+            canonical_state = env.get_canonical_form_obs()
+            symmetries = get_symmetries(canonical_state, policy) # rotate&flip the data&policy
             train_examples += [(x[0], x[1], player) for x in symmetries]
-            
-            pass # choose a action accroding to policy
-            done = False # apply the action to env
+
+            action = np.random.choice(np.arange(len(policy)), p=policy) # sample action from policy
+            _, reward, done = env.step(action)# apply the action to env
+
             if done:
-                pass # record all data
+                # record all data
+                result = []
+                final_player = player
+                for (canonical_state_, policy_, player_) in train_examples:
+                    value = reward if player_ == final_player else -reward
+                    result.append((canonical_state_, policy_, value))
+                return result
                 # tips: use env.compute_canonical_form_obs to transform the observation into BLACK's perspective
-            
-            pass # update mcts (you can use get_subtree())
+
+            if mcts.root.has_child(action):# update mcts (you can use get_subtree())
+                mcts = mcts.get_subtree(action)
+            else:
+                new_env = env.fork()
+                mcts = puct_mcts.PUCTMCTS(new_env, self.net, config)
             ########################
     
     def evaluate(self, show_log:bool=True):

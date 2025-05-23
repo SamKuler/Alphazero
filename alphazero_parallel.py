@@ -138,18 +138,33 @@ def execute_episode_worker(
                             # MCTS self-play
                             ########################
                             # TODO: your code here #
-                            policy = None # compute policy with mcts
-                            
-                            symmetries = get_symmetries(state, policy) # rotate&flip the data&policy
+                            policy = mcts.search()  # compute policy with mcts
+                            canonical_state = env.get_canonical_form_obs() # Magic 2
+                            symmetries = get_symmetries(canonical_state, policy)  # rotate&flip the data&policy
                             train_examples += [(x[0], x[1], player) for x in symmetries]
-                            
-                            pass # choose a action accroding to policy
-                            done = False # apply the action to env
+
+                            action = np.random.choice(len(policy), p=policy)  # choose a action accroding to policy
+                            _, reward, done = env.step(action)  # apply the action to env
+
                             if done:
-                                pass # record all data
+                                # record all data
+                                result_counter.add(reward,player)
+                                result = []
+                                final_player = player
+                                # final_player = env.current_player  # Magic
+                                for (canonical_state_, policy_, player_) in train_examples:
+                                    value = reward if player_ == final_player else -reward
+                                    result.append((canonical_state_, policy_, value))
+                                all_examples.extend(result)
+                                all_episode_len.append(len(result))
+                                break
                                 # tips: use env.compute_canonical_form_obs to transform the observation into BLACK's perspective
-                            
-                            pass # update mcts (you can use get_subtree())
+
+                            if mcts.root.has_child(action):  # update mcts (you can use get_subtree())
+                                mcts = mcts.get_subtree(action)
+                            else:
+                                new_env = env.fork()
+                                mcts = puct_mcts.PUCTMCTS(new_env, net, config)
                             ########################
                     logger.debug(f"[Worker {id}] Finished {int(args)} episodes (length={all_episode_len}) in {time.time()-st0:.3f}s, {result_counter}")
                     conn.send((all_examples, result_counter))

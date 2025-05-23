@@ -83,8 +83,9 @@ class NumpyLinearModel():
         # v_trgt: ground truth values
         # @return: an float value, reprenting the loss
         ########################
-        return None
-    
+        B = v_trgt.shape[0]
+        return np.sum((v_pred-v_trgt)**2)/B
+
     def grad_pi(self, X:np.ndarray, pi_trgt:np.ndarray, pi_pred:np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         B = X.shape[0]
         grad_w = X.T@(pi_pred-pi_trgt)/B
@@ -99,8 +100,12 @@ class NumpyLinearModel():
         # v_trgt: ground truth values
         # @return: Tuple(grad_w_v, grad_b_v)
         ########################
-        grad_w_v =  None # shape (O, )
-        grad_b_v =  None # shape (1,)
+        B = v_trgt.shape[0]
+        v_pred = self.forward_v(X)
+        com = (v_pred-v_trgt)*(1-v_pred**2)
+
+        grad_w_v =  (2./B)*(X.T@com).reshape(-1) # shape (O, )
+        grad_b_v =  (2./B)*np.sum(com,axis=0) # shape (1,)
         return grad_w_v, grad_b_v
     
     def weight_decay(self, a:float=.0) -> None:
